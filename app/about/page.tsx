@@ -28,7 +28,7 @@ export default function AboutPage() {
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-sky-800 mb-4">About BulaLink</h2>
           <p className="text-lg text-gray-600 leading-relaxed">
-            HIAL THE ASSHOLE FROM BLUMBERG! HINDUUUUU
+            Connecting Fijians through meaningful video conversations
           </p>
           <h3 className="text-sm text-gray-500 mt-2">
             A simple, anonymous way to meet new people from Fiji
