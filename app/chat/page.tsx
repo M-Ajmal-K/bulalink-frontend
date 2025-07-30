@@ -35,6 +35,7 @@ export default function ChatPage() {
 
     setupSocketListeners()
 
+    // Initialize RTC and media stream once
     rtcRef.current = new WebRTCManager(socketRef.current, "temp-id")
     rtcRef.current.getUserMedia().then((stream) => {
       if (localVideoRef.current) {
@@ -76,15 +77,13 @@ export default function ChatPage() {
       partnerIdRef.current = partnerId
       setPartnerNickname(partnerNickname || "Stranger")
 
-      rtcRef.current = new WebRTCManager(socketRef.current!, partnerId)
-
-      rtcRef.current.onRemoteStream((stream) => {
+      rtcRef.current?.onRemoteStream((stream) => {
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = stream
         }
       })
 
-      rtcRef.current.onConnectionStateChange((state) => {
+      rtcRef.current?.onConnectionStateChange((state) => {
         if (state === "connected") {
           setConnectionState("connected")
           setConnectionTime(0)
@@ -95,12 +94,8 @@ export default function ChatPage() {
       })
 
       try {
-        const stream = await rtcRef.current.getUserMedia()
-        if (stream && localVideoRef.current) {
-          localVideoRef.current.srcObject = stream
-        }
-
-        const offer = await rtcRef.current.createOffer()
+        rtcRef.current?.setPartnerId(partnerId)
+        const offer = await rtcRef.current?.createOffer()
         if (offer) socketRef.current?.sendOffer(offer, partnerId)
       } catch (error) {
         console.error("Camera/mic access denied", error)
@@ -110,31 +105,10 @@ export default function ChatPage() {
 
     socketRef.current.onOfferReceived(async ({ offer, from }) => {
       partnerIdRef.current = from
-      rtcRef.current = new WebRTCManager(socketRef.current!, from)
-
-      rtcRef.current.onRemoteStream((stream) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = stream
-        }
-      })
-
-      rtcRef.current.onConnectionStateChange((state) => {
-        if (state === "connected") {
-          setConnectionState("connected")
-          setConnectionTime(0)
-        } else if (state === "disconnected") {
-          setConnectionState("disconnected")
-          setPartnerNickname("")
-        }
-      })
+      rtcRef.current?.setPartnerId(from)
 
       try {
-        const stream = await rtcRef.current.getUserMedia()
-        if (stream && localVideoRef.current) {
-          localVideoRef.current.srcObject = stream
-        }
-
-        const answer = await rtcRef.current.createAnswer(offer)
+        const answer = await rtcRef.current?.createAnswer(offer)
         if (answer) socketRef.current?.sendAnswer(answer, from)
       } catch (error) {
         console.error("Error answering call", error)
@@ -163,16 +137,12 @@ export default function ChatPage() {
     setConnectionState("connecting")
     setPartnerNickname("")
     setConnectionTime(0)
-    if (socketRef.current) {
-      socketRef.current.findPartner()
-    }
+    socketRef.current?.findPartner()
   }
 
   const handleEnd = () => {
     rtcRef.current?.disconnect()
-    if (socketRef.current) {
-      socketRef.current.disconnectFromPartner()
-    }
+    socketRef.current?.disconnectFromPartner()
     router.push("/")
   }
 
@@ -255,7 +225,7 @@ export default function ChatPage() {
         <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            <span>{partnerNickname || "Anonymous"}</span>
+            <span>{partnerNickname || "Stranger"}</span>
             <span className="text-gray-300">•</span>
             <span className="text-gray-300">{formatTime(connectionTime)}</span>
           </div>

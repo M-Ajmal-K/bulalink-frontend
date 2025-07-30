@@ -18,6 +18,11 @@ export class WebRTCManager {
     this.initializePeerConnection()
   }
 
+  // ✅ Fix: allow setting partnerId later
+  setPartnerId(id: string) {
+    this.partnerId = id
+  }
+
   private initializePeerConnection() {
     const config: RTCConfiguration = {
       iceServers: [
@@ -90,7 +95,7 @@ export class WebRTCManager {
       await this.peerConnection.setLocalDescription(answer)
       this.socketManager.sendAnswer(answer, this.partnerId)
 
-      // 🧊 Process any ICE candidates that came before remote description was set
+      // 🧊 Flush buffered ICE candidates
       await this.flushPendingIceCandidates()
 
       return answer
