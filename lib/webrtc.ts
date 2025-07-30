@@ -18,11 +18,6 @@ export class WebRTCManager {
     this.initializePeerConnection()
   }
 
-  // ✅ Fix: allow setting partnerId later
-  setPartnerId(id: string) {
-    this.partnerId = id
-  }
-
   private initializePeerConnection() {
     const config: RTCConfiguration = {
       iceServers: [
@@ -40,14 +35,12 @@ export class WebRTCManager {
       event.streams[0].getTracks().forEach((track) => {
         this.remoteStream!.addTrack(track)
       })
-      if (this.onRemoteStreamCallback) {
-        this.onRemoteStreamCallback(this.remoteStream)
-      }
+      this.onRemoteStreamCallback?.(this.remoteStream)
     }
 
     this.peerConnection.onconnectionstatechange = () => {
-      if (this.onConnectionStateCallback && this.peerConnection) {
-        this.onConnectionStateCallback(this.peerConnection.connectionState)
+      if (this.peerConnection) {
+        this.onConnectionStateCallback?.(this.peerConnection.connectionState)
       }
     }
 
@@ -77,7 +70,6 @@ export class WebRTCManager {
     try {
       const offer = await this.peerConnection.createOffer()
       await this.peerConnection.setLocalDescription(offer)
-      this.socketManager.sendOffer(offer, this.partnerId)
       return offer
     } catch (error) {
       console.error("❌ Error creating offer:", error)
@@ -91,11 +83,10 @@ export class WebRTCManager {
     try {
       await this.peerConnection.setRemoteDescription(offer)
       this.isRemoteDescriptionSet = true
+
       const answer = await this.peerConnection.createAnswer()
       await this.peerConnection.setLocalDescription(answer)
-      this.socketManager.sendAnswer(answer, this.partnerId)
 
-      // 🧊 Flush buffered ICE candidates
       await this.flushPendingIceCandidates()
 
       return answer

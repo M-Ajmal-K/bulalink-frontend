@@ -31,27 +31,27 @@ export default function ChatPage() {
 
     const userId = generateUserId()
     socketRef.current = new SocketManager(userId, storedNickname)
-    socketRef.current.connect()
 
-    setupSocketListeners()
+    socketRef.current.connect().then(() => {
+      setupSocketListeners()
 
-    // Initialize RTC and media stream once
-    rtcRef.current = new WebRTCManager(socketRef.current, "temp-id")
-    rtcRef.current.getUserMedia().then((stream) => {
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream
-      }
-
-      const waitForSocket = setInterval(() => {
-        if (socketRef.current?.isSocketConnected()) {
-          clearInterval(waitForSocket)
-          socketRef.current.findPartner()
-          setConnectionState("connecting")
+      rtcRef.current = new WebRTCManager(socketRef.current!, "temp-id")
+      rtcRef.current.getUserMedia().then((stream) => {
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream
         }
-      }, 200)
-    }).catch((err) => {
-      console.error("🚫 Could not get user media:", err)
-      setConnectionState("error")
+
+        const waitForSocket = setInterval(() => {
+          if (socketRef.current?.isSocketConnected()) {
+            clearInterval(waitForSocket)
+            socketRef.current?.findPartner()
+            setConnectionState("connecting")
+          }
+        }, 200)
+      }).catch((err) => {
+        console.error("🚫 Could not get user media:", err)
+        setConnectionState("error")
+      })
     })
 
     return () => {
@@ -71,9 +71,10 @@ export default function ChatPage() {
   }, [connectionState])
 
   const setupSocketListeners = () => {
-    if (!socketRef.current) return
+    const socket = socketRef.current
+    if (!socket) return
 
-    socketRef.current.onPartnerFound(async ({ partnerId, partnerNickname }) => {
+    socket.onPartnerFound(async ({ partnerId, partnerNickname }) => {
       partnerIdRef.current = partnerId
       setPartnerNickname(partnerNickname || "Stranger")
 
@@ -94,37 +95,47 @@ export default function ChatPage() {
       })
 
       try {
-        rtcRef.current?.setPartnerId(partnerId)
+        rtcRef.current = new WebRTCManager(socket, partnerId)
+        await rtcRef.current.getUserMedia().then((stream) => {
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream
+          }
+        })
         const offer = await rtcRef.current?.createOffer()
-        if (offer) socketRef.current?.sendOffer(offer, partnerId)
+        if (offer) socket.sendOffer(offer, partnerId)
       } catch (error) {
         console.error("Camera/mic access denied", error)
         setConnectionState("error")
       }
     })
 
-    socketRef.current.onOfferReceived(async ({ offer, from }) => {
+    socket.onOfferReceived(async ({ offer, from }) => {
       partnerIdRef.current = from
-      rtcRef.current?.setPartnerId(from)
+      rtcRef.current = new WebRTCManager(socket, from)
 
       try {
+        await rtcRef.current.getUserMedia().then((stream) => {
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream
+          }
+        })
         const answer = await rtcRef.current?.createAnswer(offer)
-        if (answer) socketRef.current?.sendAnswer(answer, from)
+        if (answer) socket.sendAnswer(answer, from)
       } catch (error) {
         console.error("Error answering call", error)
         setConnectionState("error")
       }
     })
 
-    socketRef.current.onAnswerReceived(async ({ answer }) => {
+    socket.onAnswerReceived(async ({ answer }) => {
       await rtcRef.current?.handleAnswer(answer)
     })
 
-    socketRef.current.onIceCandidateReceived(async ({ candidate }) => {
+    socket.onIceCandidateReceived(async ({ candidate }) => {
       await rtcRef.current?.handleIceCandidate(candidate)
     })
 
-    socketRef.current.onPartnerDisconnected(() => {
+    socket.onPartnerDisconnected(() => {
       rtcRef.current?.disconnect()
       setConnectionState("disconnected")
       setPartnerNickname("")
