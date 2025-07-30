@@ -9,6 +9,9 @@ export class WebRTCManager {
   private onRemoteStreamCallback?: (stream: MediaStream) => void
   private onConnectionStateCallback?: (state: string) => void
 
+  private pendingIceCandidates: RTCIceCandidateInit[] = []
+  private isRemoteDescriptionSet: boolean = false
+
   constructor(socketManager: SocketManager, partnerId: string) {
     this.socketManager = socketManager
     this.partnerId = partnerId
@@ -25,7 +28,6 @@ export class WebRTCManager {
 
     this.peerConnection = new RTCPeerConnection(config)
 
-    // 🔁 Listen for remote media stream
     this.peerConnection.ontrack = (event) => {
       if (!this.remoteStream) {
         this.remoteStream = new MediaStream()
@@ -38,14 +40,12 @@ export class WebRTCManager {
       }
     }
 
-    // 🔁 Listen for connection state changes
     this.peerConnection.onconnectionstatechange = () => {
       if (this.onConnectionStateCallback && this.peerConnection) {
         this.onConnectionStateCallback(this.peerConnection.connectionState)
       }
     }
 
-    // 🔁 Listen for ICE candidates and send them to the peer
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         this.socketManager.sendIceCandidate(event.candidate, this.partnerId)
@@ -56,12 +56,9 @@ export class WebRTCManager {
   async getUserMedia(constraints: MediaStreamConstraints = { video: true, audio: true }) {
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints)
-
-      // ✅ Add local tracks to peer connection
       this.localStream.getTracks().forEach((track) => {
         this.peerConnection?.addTrack(track, this.localStream!)
       })
-
       return this.localStream
     } catch (error) {
       console.error("❌ Error accessing media devices:", error)
@@ -88,9 +85,14 @@ export class WebRTCManager {
 
     try {
       await this.peerConnection.setRemoteDescription(offer)
+      this.isRemoteDescriptionSet = true
       const answer = await this.peerConnection.createAnswer()
       await this.peerConnection.setLocalDescription(answer)
       this.socketManager.sendAnswer(answer, this.partnerId)
+
+      // 🧊 Process any ICE candidates that came before remote description was set
+      await this.flushPendingIceCandidates()
+
       return answer
     } catch (error) {
       console.error("❌ Error creating answer:", error)
@@ -100,8 +102,11 @@ export class WebRTCManager {
 
   async handleAnswer(answer: RTCSessionDescriptionInit) {
     if (!this.peerConnection) return
+
     try {
       await this.peerConnection.setRemoteDescription(answer)
+      this.isRemoteDescriptionSet = true
+      await this.flushPendingIceCandidates()
     } catch (error) {
       console.error("❌ Error handling answer:", error)
     }
@@ -109,11 +114,28 @@ export class WebRTCManager {
 
   async handleIceCandidate(candidate: RTCIceCandidateInit) {
     if (!this.peerConnection) return
+
+    if (!this.isRemoteDescriptionSet) {
+      this.pendingIceCandidates.push(candidate)
+      return
+    }
+
     try {
       await this.peerConnection.addIceCandidate(candidate)
     } catch (error) {
       console.error("❌ Error handling ICE candidate:", error)
     }
+  }
+
+  private async flushPendingIceCandidates() {
+    for (const candidate of this.pendingIceCandidates) {
+      try {
+        await this.peerConnection?.addIceCandidate(candidate)
+      } catch (err) {
+        console.error("❌ Failed to flush ICE candidate:", err)
+      }
+    }
+    this.pendingIceCandidates = []
   }
 
   onRemoteStream(callback: (stream: MediaStream) => void) {
@@ -136,6 +158,8 @@ export class WebRTCManager {
     this.localStream = null
     this.remoteStream = null
     this.peerConnection = null
+    this.pendingIceCandidates = []
+    this.isRemoteDescriptionSet = false
   }
 
   getLocalStream() {
