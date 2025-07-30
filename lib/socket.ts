@@ -23,7 +23,7 @@ export class SocketManager {
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.socket = io("http://localhost:3001", {
+      this.socket = io("https://bulalink-backend.onrender.com", {
         query: {
           userId: this.userId,
           nickname: this.nickname,
