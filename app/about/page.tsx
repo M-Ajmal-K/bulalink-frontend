@@ -30,6 +30,9 @@ export default function AboutPage() {
           <p className="text-lg text-gray-600 leading-relaxed">
             Connecting Fijians through meaningful video conversations
           </p>
+          <h3 className="text-sm text-gray-500 mt-2">
+            A simple, anonymous way to meet new people from Fiji
+          </h3>
         </div>
 
         <div className="space-y-8">
