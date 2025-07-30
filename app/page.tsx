@@ -48,7 +48,7 @@ export default function HomePage() {
               <span className="text-4xl">🎥</span>
             </div>
             <h2 className="text-xl md:text-2xl text-gray-700 mb-4 leading-relaxed">
-              Meet new people from around Fiji through video chat
+              Meet HILAL The Greates Asshole From Blumberg! HINDUUU
             </h2>
           </div>
 
