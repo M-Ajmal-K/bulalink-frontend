@@ -32,27 +32,26 @@ export default function ChatPage() {
     const userId = generateUserId()
     socketRef.current = new SocketManager(userId, storedNickname)
 
-    socketRef.current.connect().then(() => {
+    const init = async () => {
+      await socketRef.current?.connect()
       setupSocketListeners()
 
       rtcRef.current = new WebRTCManager(socketRef.current!, "temp-id")
-      rtcRef.current.getUserMedia().then((stream) => {
+      try {
+        const stream = await rtcRef.current.getUserMedia()
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream
         }
 
-        const waitForSocket = setInterval(() => {
-          if (socketRef.current?.isSocketConnected()) {
-            clearInterval(waitForSocket)
-            socketRef.current?.findPartner()
-            setConnectionState("connecting")
-          }
-        }, 200)
-      }).catch((err) => {
+        socketRef.current?.findPartner()
+        setConnectionState("connecting")
+      } catch (err) {
         console.error("🚫 Could not get user media:", err)
         setConnectionState("error")
-      })
-    })
+      }
+    }
+
+    init()
 
     return () => {
       rtcRef.current?.disconnect()
@@ -71,10 +70,9 @@ export default function ChatPage() {
   }, [connectionState])
 
   const setupSocketListeners = () => {
-    const socket = socketRef.current
-    if (!socket) return
+    if (!socketRef.current) return
 
-    socket.onPartnerFound(async ({ partnerId, partnerNickname }) => {
+    socketRef.current.onPartnerFound(async ({ partnerId, partnerNickname }) => {
       partnerIdRef.current = partnerId
       setPartnerNickname(partnerNickname || "Stranger")
 
@@ -95,47 +93,37 @@ export default function ChatPage() {
       })
 
       try {
-        rtcRef.current = new WebRTCManager(socket, partnerId)
-        await rtcRef.current.getUserMedia().then((stream) => {
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream
-          }
-        })
+        rtcRef.current?.setPartnerId(partnerId)
         const offer = await rtcRef.current?.createOffer()
-        if (offer) socket.sendOffer(offer, partnerId)
+        if (offer) socketRef.current?.sendOffer(offer, partnerId)
       } catch (error) {
         console.error("Camera/mic access denied", error)
         setConnectionState("error")
       }
     })
 
-    socket.onOfferReceived(async ({ offer, from }) => {
+    socketRef.current.onOfferReceived(async ({ offer, from }) => {
       partnerIdRef.current = from
-      rtcRef.current = new WebRTCManager(socket, from)
+      rtcRef.current?.setPartnerId(from)
 
       try {
-        await rtcRef.current.getUserMedia().then((stream) => {
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream
-          }
-        })
         const answer = await rtcRef.current?.createAnswer(offer)
-        if (answer) socket.sendAnswer(answer, from)
+        if (answer) socketRef.current?.sendAnswer(answer, from)
       } catch (error) {
         console.error("Error answering call", error)
         setConnectionState("error")
       }
     })
 
-    socket.onAnswerReceived(async ({ answer }) => {
+    socketRef.current.onAnswerReceived(async ({ answer }) => {
       await rtcRef.current?.handleAnswer(answer)
     })
 
-    socket.onIceCandidateReceived(async ({ candidate }) => {
+    socketRef.current.onIceCandidateReceived(async ({ candidate }) => {
       await rtcRef.current?.handleIceCandidate(candidate)
     })
 
-    socket.onPartnerDisconnected(() => {
+    socketRef.current.onPartnerDisconnected(() => {
       rtcRef.current?.disconnect()
       setConnectionState("disconnected")
       setPartnerNickname("")

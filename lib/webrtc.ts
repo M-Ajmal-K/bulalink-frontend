@@ -18,6 +18,11 @@ export class WebRTCManager {
     this.initializePeerConnection()
   }
 
+  // ✅ Add this missing method
+  setPartnerId(id: string) {
+    this.partnerId = id
+  }
+
   private initializePeerConnection() {
     const config: RTCConfiguration = {
       iceServers: [
