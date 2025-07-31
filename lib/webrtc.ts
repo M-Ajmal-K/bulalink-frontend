@@ -1,9 +1,29 @@
 import { SocketManager } from "./socket"
 
-// Parse STUN (and optional TURN) servers from environment
+// Parse STUN and TURN servers from environment
 const parseICEServers = (): RTCIceServer[] => {
-  const raw = process.env.NEXT_PUBLIC_STUN_SERVERS || ""
-  return raw.split(",").map((url) => ({ urls: url.trim() }))
+  const servers: RTCIceServer[] = [];
+
+  // STUN servers
+  const stunEnv = process.env.NEXT_PUBLIC_STUN_SERVERS || "";
+  stunEnv.split(",")
+    .map(url => url.trim())
+    .filter(url => url.length)
+    .forEach(url => servers.push({ urls: url }));
+
+  // TURN server
+  const turnUrl = process.env.NEXT_PUBLIC_TURN_SERVER_URL;
+  const turnUser = process.env.NEXT_PUBLIC_TURN_SERVER_USER;
+  const turnPass = process.env.NEXT_PUBLIC_TURN_SERVER_PASS;
+  if (turnUrl && turnUser && turnPass) {
+    servers.push({
+      urls: turnUrl,
+      username: turnUser,
+      credential: turnPass,
+    });
+  }
+
+  return servers;
 }
 
 export class WebRTCManager {
