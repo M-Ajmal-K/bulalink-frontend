@@ -1,5 +1,11 @@
 import { SocketManager } from "./socket"
 
+// Parse STUN (and optional TURN) servers from environment
+const parseICEServers = (): RTCIceServer[] => {
+  const raw = process.env.NEXT_PUBLIC_STUN_SERVERS || ""
+  return raw.split(",").map((url) => ({ urls: url.trim() }))
+}
+
 export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null
   private localStream: MediaStream | null = null
@@ -18,17 +24,13 @@ export class WebRTCManager {
     this.initializePeerConnection()
   }
 
-  // ✅ Add this missing method
   setPartnerId(id: string) {
     this.partnerId = id
   }
 
   private initializePeerConnection() {
     const config: RTCConfiguration = {
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-      ],
+      iceServers: parseICEServers(),
     }
 
     this.peerConnection = new RTCPeerConnection(config)
@@ -40,10 +42,12 @@ export class WebRTCManager {
       event.streams[0].getTracks().forEach((track) => {
         this.remoteStream!.addTrack(track)
       })
-      this.onRemoteStreamCallback?.(this.remoteStream)
+      console.log("🎥 ontrack fired, remoteStream tracks:", this.remoteStream?.getTracks())
+      this.onRemoteStreamCallback?.(this.remoteStream!)
     }
 
     this.peerConnection.onconnectionstatechange = () => {
+      console.log("🔗 Connection state:", this.peerConnection?.connectionState)
       if (this.peerConnection) {
         this.onConnectionStateCallback?.(this.peerConnection.connectionState)
       }
@@ -51,6 +55,7 @@ export class WebRTCManager {
 
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log("🥶 Sending ICE candidate:", event.candidate)
         this.socketManager.sendIceCandidate(event.candidate, this.partnerId)
       }
     }
@@ -62,6 +67,7 @@ export class WebRTCManager {
       this.localStream.getTracks().forEach((track) => {
         this.peerConnection?.addTrack(track, this.localStream!)
       })
+      console.log("✅ Added local tracks:", this.localStream?.getTracks())
       return this.localStream
     } catch (error) {
       console.error("❌ Error accessing media devices:", error)
@@ -73,8 +79,10 @@ export class WebRTCManager {
     if (!this.peerConnection) return null
 
     try {
+      console.log("💡 Creating offer")
       const offer = await this.peerConnection.createOffer()
       await this.peerConnection.setLocalDescription(offer)
+      console.log("📋 Local description set (offer):", offer)
       return offer
     } catch (error) {
       console.error("❌ Error creating offer:", error)
@@ -86,14 +94,15 @@ export class WebRTCManager {
     if (!this.peerConnection) return null
 
     try {
+      console.log("📞 Received offer, setting remote description", offer)
       await this.peerConnection.setRemoteDescription(offer)
       this.isRemoteDescriptionSet = true
 
       const answer = await this.peerConnection.createAnswer()
       await this.peerConnection.setLocalDescription(answer)
+      console.log("📋 Local description set (answer):", answer)
 
       await this.flushPendingIceCandidates()
-
       return answer
     } catch (error) {
       console.error("❌ Error creating answer:", error)
@@ -105,6 +114,7 @@ export class WebRTCManager {
     if (!this.peerConnection) return
 
     try {
+      console.log("📞 Received answer, setting remote description", answer)
       await this.peerConnection.setRemoteDescription(answer)
       this.isRemoteDescriptionSet = true
       await this.flushPendingIceCandidates()
@@ -117,11 +127,13 @@ export class WebRTCManager {
     if (!this.peerConnection) return
 
     if (!this.isRemoteDescriptionSet) {
+      console.log("⏳ Queueing ICE candidate until remote description is set", candidate)
       this.pendingIceCandidates.push(candidate)
       return
     }
 
     try {
+      console.log("🥶 Adding ICE candidate:", candidate)
       await this.peerConnection.addIceCandidate(candidate)
     } catch (error) {
       console.error("❌ Error handling ICE candidate:", error)
@@ -131,6 +143,7 @@ export class WebRTCManager {
   private async flushPendingIceCandidates() {
     for (const candidate of this.pendingIceCandidates) {
       try {
+        console.log("🚚 Flushing pending ICE candidate:", candidate)
         await this.peerConnection?.addIceCandidate(candidate)
       } catch (err) {
         console.error("❌ Failed to flush ICE candidate:", err)

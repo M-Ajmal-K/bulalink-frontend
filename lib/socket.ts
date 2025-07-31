@@ -11,6 +11,9 @@ export interface SocketEvents {
   error: (data: { message: string }) => void
 }
 
+// Use environment variable for signaling URL
+const SIGNALING_URL = process.env.NEXT_PUBLIC_SIGNALING_URL!
+
 export class SocketManager {
   private socket: Socket | null = null
   private userId: string
@@ -23,7 +26,7 @@ export class SocketManager {
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.socket = io("https://bulalink-backend.onrender.com", {
+      this.socket = io(SIGNALING_URL, {
         query: {
           userId: this.userId,
           nickname: this.nickname,
@@ -31,7 +34,7 @@ export class SocketManager {
       })
 
       this.socket.on("connect", () => {
-        console.log("✅ Socket connected")
+        console.log(`✅ Socket connected to ${SIGNALING_URL}`)
         resolve()
       })
 
